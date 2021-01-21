@@ -83,8 +83,8 @@ Wrong(content) = Choice(content, correct=false)
     # TODO: Enforce single correct choice if single==true
 end
 
-MultiChoice(choices; kwargs...) = MultiChoice(; choices, kwargs...)
-SingleChoice(choices; kwargs...) = MultiChoice(; choices, single=true, kwargs...)
+MultiChoice(choices...; kwargs...) = MultiChoice(; choices=collect(choices), kwargs...)
+SingleChoice(choices...; kwargs...) = MultiChoice(; choices=collect(choices), single=true, kwargs...)
 
 struct Numerical <: Answer
     val::Real
@@ -146,6 +146,7 @@ Quiz(c::Category) = Quiz(categories=[c])
 preview(io::IO, ::Nothing) = nothing
 preview(io::IO, ::Essay) = print(io, "Essay")
 preview(io::IO, ::ShortAnswer) = print(io, "ShortAnswer")
+preview(io::IO, n::Numerical) = print(io, "$(n.val) ± $(n.tolerance)")
 preview(io::IO, tf::TrueFalse) = print(io, "($(tf.correct ? "x" : " ")) True  ($(tf.correct ? " " : "x")) False")
 preview(io::IO, yn::YesNo) = print(io, "($(yn.yes ? "x" : " ")) Yes  ($(yn.yes ? " " : "x")) No")
 function preview(io::IO, choice::Choice)
@@ -177,7 +178,7 @@ end
 
 function preview(io::IO, cat::Category)
     println(io, "<h2>Category $(cat.name)</h2>")
-    for q in cat.questions
+    for q in values(cat.questions)
         preview(io, q)
     end
 end
@@ -194,6 +195,8 @@ end
 
 function preview(object)
     open("questions.html", "w") do io
+        # TODO: Remove next line - temporary addition
+        println(io, """<script src="https://code.jquery.com/jquery-3.5.1.min.js" crossorigin="anonymous"></script>""")
         preview(io, object)
     end
     run(`firefox-reload`)
@@ -202,6 +205,8 @@ end
 function Base.show(io::IO, ::MIME"text/html", t::Text)
     print(io, """<span lang="$(t.lang)" class="multilang">""" * repr("text/html", t.text) * "</span>")
 end
+
+png_cache = Dict{String, Any}()
 
 function render_png(s::LaTeXString; dpi=150, debug=false, name=tempname(cleanup=false))
     doc = """
@@ -218,6 +223,11 @@ function render_png(s::LaTeXString; dpi=150, debug=false, name=tempname(cleanup=
     """
     doc = replace(doc, "\\begin{align}"=>"\\[\n\\begin{aligned}")
     doc = replace(doc, "\\end{align}"=>"\\end{aligned}\n\\]")
+
+    global png_cache
+    if doc in keys(png_cache)
+        return png_cache[doc]
+    end
     try
         open("$(name).tex", "w") do f
             write(f, doc)
@@ -228,7 +238,9 @@ function render_png(s::LaTeXString; dpi=150, debug=false, name=tempname(cleanup=
             run(cmd)
             pdftoppm = run(`pdftoppm -r $(dpi) -png $(name).pdf $(name)`)
         end
-        return load("$(name)-1.png")
+        png = load("$(name)-1.png")
+        png_cache[doc] = png
+        return png
     finally
         Base.Filesystem.rm("$(name).tex")
         Base.Filesystem.rm("$(name).pdf")
@@ -303,7 +315,7 @@ function moodle_xml_answer(xquestion, text::String, fraction::Int; kwargs...)
     xtext = new_child(xans, "text")
     add_text(xtext, text)
     for (tag, val) in kwargs
-        xtag = new_child(xans, tag)
+        xtag = new_child(xans, string(tag))
         add_text(xtag, string(val))
     end
 end
@@ -318,7 +330,7 @@ moodle_xml(yn::YesNo, xquestion) = begin
     moodle_xml_answer(xquestion, "true", yn.yes ? 100 : 0)
     moodle_xml_answer(xquestion, "false", !yn.yes ? 100 : 0)
 end
-moodle_xml(na::Numerical, xquestion) = moodle_xml_answer(xquestion, na.val, 100, na.tolerance)
+moodle_xml(na::Numerical, xquestion) = moodle_xml_answer(xquestion, string(na.val), 100; na.tolerance)
 moodle_xml(sa::ShortAnswer, xquestion) = moodle_xml_answer(xquestion, sa.text, sa.fraction)
 # TODO: Multiple short and numerical answers
 moodle_xml(mc::MultiChoice, xquestion) = begin
@@ -367,7 +379,7 @@ function moodle_xml(cat::Category, xroot)
     xquestion = new_child(xroot, "question")
     # Set the type
     set_attribute(xquestion, "type", "category")
-    @pipe xquestion |> new_child(_, "category") |> new_child(_, "text") |> add_text(_, "\$course\$/top/$(cat.name)")
+    @pipe xquestion |> new_child(_, "category") |> new_child(_, "text") |> add_text(_, "\$course\$/top/MoodleQuiz.jl/$(cat.name)")
     for q in values(cat.questions)
         moodle_xml(q, xroot)
     end

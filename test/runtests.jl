@@ -8,6 +8,10 @@ using Test
                  ShortAnswer("13:49"))
     @test moodle_xml_type(q) == "shortanswer"
 
+    q = Question("numerical", 1, "", [ "1 + 1 =" ],
+                 Numerical(2))
+    @test moodle_xml_type(q) == "numerical"
+
     q = Question("essay", 1, "", [ "What did you do today?" ] )
     @test typeof(q.answer) == Essay
     @test moodle_xml_type(q) == "essay"
@@ -31,22 +35,22 @@ using Test
 
     q = Question("multichoice", 1, "",
                  [ "Moodle is (multiple of):" ],
-                 MultiChoice([
-                     Correct("LMS")
-                     Correct("web application")
-                     Wrong("Wiki")
-                     Wrong("desktop application")
-                 ]))
+                 MultiChoice(
+                     Correct("LMS"),
+                     Correct("web application"),
+                     Wrong("Wiki"),
+                     Wrong("desktop application"),
+                 ))
     moodle_xml(q)
     @test moodle_xml_type(q) == "multichoice"
 
     q = Question("singlechoice", 1, "",
                  [ "Moodle is (single of):" ],
-                 SingleChoice([
-                     Correct("LMS")
-                     Wrong("Wiki")
-                     Wrong("desktop application")
-                 ]))
+                 SingleChoice(
+                     Correct("LMS"),
+                     Wrong("Wiki"),
+                     Wrong("desktop application"),
+                 ))
     @test moodle_xml_type(q) == "multichoice"
 
     q = Question("cloze", 1, "",
