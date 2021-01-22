@@ -15,6 +15,7 @@ Pipe = "b98c9c47-44ae-5843-9183-064241ee97a0"
 
 [compat]
 LightXML = "0.9"
+HttpCommon = "0.5"
 julia = "1"
 
 [extras]
